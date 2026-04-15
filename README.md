@@ -4,7 +4,7 @@ Most people use AI to review their resume like this: paste CV, paste job descrip
 
 A resume doesn't have one reader. It has four — in sequence. An ATS filter. A recruiter doing a 5-second scan. An interviewer looking for defensible claims. A hiring manager looking for business impact. Each one filters candidates using different criteria. Resume Lens evaluates your resume through each reader, in order, and tells you specifically where you're getting filtered out.
 
-**[Live demo →](https://resume-lens.vercel.app)**
+**[Live demo →](https://resumelens-olive.vercel.app)**
 
 ---
 
