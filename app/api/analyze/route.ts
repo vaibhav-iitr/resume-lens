@@ -4,7 +4,6 @@ import { analyzeResume, MOCK_RESULT } from '@/lib/claude';
 import { analyzeResumeWithGroq } from '@/lib/groq';
 import { analyzeResumeWithOpenAI } from '@/lib/openai';
 import { analyzeResumeAlgorithmically } from '@/lib/analyzer';
-import { extractTextFromPdf } from '@/lib/pdf';
 import { AnalyzeResponse } from '@/lib/types';
 import { verifyToken, COOKIE_NAME } from '@/lib/auth';
 import { getUserById, decrementLLMUse } from '@/lib/store';
@@ -43,6 +42,7 @@ export async function POST(request: NextRequest) {
       }
 
       const arrayBuffer = await file.arrayBuffer();
+      const { extractTextFromPdf } = await import('@/lib/pdf');
       resumeText = await extractTextFromPdf(Buffer.from(arrayBuffer));
       jobDescription = jd.trim();
     } else {
