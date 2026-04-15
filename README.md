@@ -53,7 +53,7 @@ No database in V1. Auth state persists via httpOnly JWT cookie. User store is a 
 ## Local setup
 
 ```bash
-git clone https://github.com/vaibhav-sh/resume-lens.git
+git clone https://github.com/vaibhav-iitr/resume-lens.git
 cd resume-lens
 npm install
 cp .env.example .env.local
@@ -100,4 +100,4 @@ See [BACKLOG.md](./BACKLOG.md) for hypotheses being tested with early users and 
 
 ---
 
-Built by [Vaibhav Shrivastava](https://vaibhav.sh). Inspired by the four-reader hiring model from Austen McDonald and Neo Kim.
+Built by [Vaibhav Shrivastava](https://vaibhav.sh) · [GitHub](https://github.com/vaibhav-iitr/resume-lens). Inspired by the four-reader hiring model from Austen McDonald and Neo Kim.
