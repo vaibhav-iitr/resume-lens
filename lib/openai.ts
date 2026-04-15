@@ -2,16 +2,14 @@ import OpenAI from 'openai';
 import { SYSTEM_PROMPT } from './claude';
 import { AnalysisResult } from './types';
 
-const client = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 export async function analyzeResumeWithOpenAI(
   resumeText: string,
   jobDescription: string,
   apiKey?: string,
 ): Promise<AnalysisResult> {
-  const openai = apiKey ? new OpenAI({ apiKey }) : client;
+  const key = apiKey ?? process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('No OpenAI API key provided.');
+  const openai = new OpenAI({ apiKey: key });
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o',
