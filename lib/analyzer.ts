@@ -11,6 +11,7 @@ import { AnalysisResult, PersonaScore, PriorityFix } from './types';
 // Word lists
 
 const STOP_WORDS = new Set([
+  // Articles / prepositions / conjunctions
   'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her',
   'was', 'one', 'our', 'had', 'him', 'his', 'has', 'its', 'may', 'will',
   'who', 'with', 'this', 'that', 'from', 'they', 'been', 'have', 'what',
@@ -19,6 +20,12 @@ const STOP_WORDS = new Set([
   'must', 'well', 'able', 'here', 'how', 'work', 'able', 'across', 'within',
   'about', 'including', 'using', 'strong', 'good', 'new', 'other', 'need',
   'role', 'team', 'join', 'help', 'make', 'take', 'seek', 'looking',
+  // Common words missing from original that produce junk bigrams
+  'or', 'to', 'at', 'be', 'by', 'we', 'as', 'an', 'of', 'in', 'is',
+  'it', 'if', 'on', 'do', 'up', 'so', 'no', 'go', 'us', 'me', 'my',
+  'nice', 'have', 'like', 'their', 'nice', 'great', 'key', 'ideal',
+  'candidate', 'position', 'company', 'please', 'apply',
+  'requirements', 'qualifications', 'responsibilities', 'description',
 ]);
 
 const STRONG_ACTION_VERBS = new Set([
@@ -67,7 +74,7 @@ const SCOPE_TERMS = [
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^a-z0-9\s\+#\.]/g, ' ')
+    .replace(/[^a-z0-9\s\+#]/g, ' ')
     .split(/\s+/)
     .filter(w => w.length > 1);
 }
@@ -98,11 +105,6 @@ function extractRoledurations(text: string): Array<{ durationMonths: number; con
   // Match patterns like: Jan 2020 – Mar 2021, 2019 - 2022, Jan 2021 – Present
   const dateRangeRe =
     /(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+)?(\d{4})\s*[–\-—to]+\s*(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+)?(\d{4}|present|current|now)/gi;
-
-  const monthMap: Record<string, number> = {
-    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
-  };
 
   let match;
   while ((match = dateRangeRe.exec(text)) !== null) {
@@ -165,7 +167,13 @@ function extractJDKeywords(jd: string): string[] {
   }
 
   return Object.entries(freq)
-    .filter(([, count]) => count >= 2 || /[A-Z]/.test(jd.slice(jd.toLowerCase().indexOf(Object.keys(freq)[0]), jd.toLowerCase().indexOf(Object.keys(freq)[0]) + 20)))
+    .filter(([term, count]) => {
+      if (count >= 2) return true;
+      // Include single-occurrence terms that appear capitalised in the JD (proper nouns: Python, AWS, React…)
+      const idx = jd.toLowerCase().indexOf(term);
+      if (idx === -1) return false;
+      return /[A-Z]/.test(jd.slice(idx, idx + term.length));
+    })
     .sort(([, a], [, b]) => b - a)
     .slice(0, 40)
     .map(([term]) => term);
@@ -194,7 +202,6 @@ function clamp(n: number, min: number, max: number) {
 // Persona scorers
 
 function scoreATS(resumeText: string, jdKeywords: string[], missingKeywords: string[]): PersonaScore {
-  const lower = resumeText.toLowerCase();
   const strengths: string[] = [];
   const issues: string[] = [];
 
@@ -259,7 +266,7 @@ function scoreATS(resumeText: string, jdKeywords: string[], missingKeywords: str
   };
 }
 
-function scoreRecruiter(resumeText: string, jdText: string): PersonaScore {
+function scoreRecruiter(resumeText: string, _jdText: string): PersonaScore {
   const strengths: string[] = [];
   const issues: string[] = [];
 
@@ -272,8 +279,11 @@ function scoreRecruiter(resumeText: string, jdText: string): PersonaScore {
   const summaryText = lines.slice(0, 8).join(' ');
   const buzzwordsFound = findBuzzwords(summaryText);
 
-  // Brand signal: look for known markers of recognisable companies (imperfect but reasonable)
-  const companySignals = (resumeText.match(/\b(google|meta|facebook|amazon|apple|microsoft|netflix|uber|stripe|airbnb|spotify|twitter|linkedin|salesforce|oracle|ibm|accenture|mckinsey|goldman|jpmorgan|booking\.com|booking|shopify|atlassian|twilio|databricks|snowflake|openai|anthropic)\b/gi) || []);
+  // Brand signal: search only in non-contact lines so "linkedin.com/in/..." URLs don't
+  // trigger a false positive match for LinkedIn as an employer.
+  const bodyLines = lines.filter(l => !/https?:\/\/|www\.|\.com\/|@|\+\d|\(\d{3}\)/i.test(l));
+  const bodyText = bodyLines.join('\n');
+  const companySignals = (bodyText.match(/\b(google|meta|facebook|amazon|apple|microsoft|netflix|uber|stripe|airbnb|spotify|twitter|linkedin|salesforce|oracle|ibm|accenture|mckinsey|goldman|jpmorgan|booking|shopify|atlassian|twilio|databricks|snowflake|openai|anthropic|razorpay|flipkart|zomato|swiggy|paytm|phonepe)\b/gi) || []);
 
   // Score
   let score = 50;
@@ -323,7 +333,7 @@ function scoreInterviewer(resumeText: string): PersonaScore {
   const issues: string[] = [];
 
   const bullets = extractBullets(resumeText);
-  const { quantified, total, examples } = countQuantifiedBullets(bullets);
+  const { quantified, total } = countQuantifiedBullets(bullets);
   const weakBullets = findWeakBullets(bullets);
   const durations = extractRoledurations(resumeText);
   const shortStints = durations.filter(d => d.durationMonths > 0 && d.durationMonths < 12);
@@ -460,11 +470,11 @@ function scoreHiringManager(resumeText: string, jdText: string): PersonaScore {
 
 function generatePriorityFixes(
   resumeText: string,
-  jdText: string,
-  atsScore: PersonaScore,
-  recruiterScore: PersonaScore,
-  interviewerScore: PersonaScore,
-  hmScore: PersonaScore,
+  _jdText: string,
+  _atsScore: PersonaScore,
+  _recruiterScore: PersonaScore,
+  _interviewerScore: PersonaScore,
+  _hmScore: PersonaScore,
   missingKeywords: string[],
 ): PriorityFix[] {
   const fixes: Array<{ weight: number; fix: PriorityFix }> = [];

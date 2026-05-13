@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react';
 
 interface ResumeInputProps {
-  onResumeChange: (value: { type: 'text'; text: string } | { type: 'file'; file: File }) => void;
+  onResumeChange: (value: { type: 'text'; text: string } | { type: 'file'; file: File } | null) => void;
 }
 
 export default function ResumeInput({ onResumeChange }: ResumeInputProps) {
@@ -37,6 +37,7 @@ export default function ResumeInput({ onResumeChange }: ResumeInputProps) {
     setText('');
     setFileName(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+    onResumeChange(null);
   }
 
   return (

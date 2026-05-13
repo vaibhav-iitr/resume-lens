@@ -84,7 +84,7 @@ export default function EngineSelector({
           onClick={() => onEngineChange('byok')}
         >
           <p className="text-sm font-semibold text-gray-900">Your API Key</p>
-          <p className="text-xs text-gray-500 mt-0.5">Anthropic or Groq</p>
+          <p className="text-xs text-gray-500 mt-0.5">Anthropic, OpenAI, or Groq</p>
         </div>
       </div>
 
