@@ -23,9 +23,15 @@ const STOP_WORDS = new Set([
   // Common words missing from original that produce junk bigrams
   'or', 'to', 'at', 'be', 'by', 'we', 'as', 'an', 'of', 'in', 'is',
   'it', 'if', 'on', 'do', 'up', 'so', 'no', 'go', 'us', 'me', 'my',
-  'nice', 'have', 'like', 'their', 'nice', 'great', 'key', 'ideal',
+  'nice', 'have', 'like', 'their', 'great', 'key', 'ideal',
   'candidate', 'position', 'company', 'please', 'apply',
   'requirements', 'qualifications', 'responsibilities', 'description',
+  // Common JD filler that slips through as "keywords"
+  'ensure', 'every', 'means', 'internal', 'native', 'hands',
+  'least', 'years', 'year', 'experience', 'prior', 'minimum',
+  'preferred', 'bonus', 'knowledge', 'understanding', 'ability',
+  'skills', 'skill', 'excellent', 'proven', 'passion', 'excited',
+  'fast', 'growing', 'based', 'world', 'class', 'building',
 ]);
 
 const STRONG_ACTION_VERBS = new Set([
@@ -54,6 +60,21 @@ const BUZZWORDS = new Set([
   'problem solver', 'fast learner', 'quick learner', 'outside the box',
   'value add', 'value-add', 'rockstar', 'ninja', 'guru', 'wizard',
 ]);
+
+// Shared company-name list used both for recruiter brand detection and to
+// prevent employer names from appearing as "missing JD keywords".
+const COMPANY_NAMES = new Set([
+  'google', 'meta', 'facebook', 'amazon', 'apple', 'microsoft', 'netflix',
+  'uber', 'stripe', 'airbnb', 'spotify', 'twitter', 'linkedin', 'salesforce',
+  'oracle', 'ibm', 'accenture', 'mckinsey', 'goldman', 'jpmorgan', 'booking',
+  'shopify', 'atlassian', 'twilio', 'databricks', 'snowflake', 'openai',
+  'anthropic', 'razorpay', 'flipkart', 'zomato', 'swiggy', 'paytm', 'phonepe',
+  'infosys', 'wipro', 'tcs', 'hcl', 'cognizant', 'capgemini', 'thoughtworks',
+]);
+
+const COMPANY_NAMES_RE = new RegExp(
+  `\\b(${[...COMPANY_NAMES].join('|')})\\b`, 'gi'
+);
 
 const BUSINESS_IMPACT_TERMS = [
   'revenue', 'cost', 'saving', 'savings', 'profit', 'margin', 'conversion',
@@ -179,19 +200,26 @@ function extractJDKeywords(jd: string): string[] {
     .map(([term]) => term);
 }
 
-/** Find JD keywords absent from resume. */
+/** True if the resume contains the keyword or its plural/singular variant. */
+function keywordInResume(kw: string, resumeLower: string): boolean {
+  if (resumeLower.includes(kw)) return true;
+  if (kw.endsWith('s') && kw.length > 3) return resumeLower.includes(kw.slice(0, -1));
+  return resumeLower.includes(kw + 's');
+}
+
+/** Find JD keywords absent from resume — excluding company names and plurals. */
 function findMissingKeywords(resumeText: string, jdKeywords: string[]): string[] {
   const resumeLower = resumeText.toLowerCase();
   return jdKeywords
-    .filter(kw => !resumeLower.includes(kw))
+    .filter(kw => !COMPANY_NAMES.has(kw) && !keywordInResume(kw, resumeLower))
     .slice(0, 12);
 }
 
-/** Keyword overlap score (0–100). */
+/** Keyword overlap score (0–100), treating plural/singular as equivalent. */
 function keywordOverlapScore(resumeText: string, jdKeywords: string[]): number {
   if (!jdKeywords.length) return 50;
   const resumeLower = resumeText.toLowerCase();
-  const matched = jdKeywords.filter(kw => resumeLower.includes(kw)).length;
+  const matched = jdKeywords.filter(kw => keywordInResume(kw, resumeLower)).length;
   return Math.round((matched / jdKeywords.length) * 100);
 }
 
@@ -283,7 +311,7 @@ function scoreRecruiter(resumeText: string, _jdText: string): PersonaScore {
   // trigger a false positive match for LinkedIn as an employer.
   const bodyLines = lines.filter(l => !/https?:\/\/|www\.|\.com\/|@|\+\d|\(\d{3}\)/i.test(l));
   const bodyText = bodyLines.join('\n');
-  const companySignals = (bodyText.match(/\b(google|meta|facebook|amazon|apple|microsoft|netflix|uber|stripe|airbnb|spotify|twitter|linkedin|salesforce|oracle|ibm|accenture|mckinsey|goldman|jpmorgan|booking|shopify|atlassian|twilio|databricks|snowflake|openai|anthropic|razorpay|flipkart|zomato|swiggy|paytm|phonepe)\b/gi) || []);
+  const companySignals = (bodyText.match(COMPANY_NAMES_RE) || []);
 
   // Score
   let score = 50;
@@ -341,10 +369,11 @@ function scoreInterviewer(resumeText: string): PersonaScore {
   // Quantification rate
   const quantRate = total > 0 ? quantified / total : 0;
 
-  // Strong verb rate — check first word of each bullet
+  // Strong verb rate — check first 3 words (resumes often lead with a project
+  // name or number before the verb, so first-word-only undercounts good CVs).
   const strongVerbBullets = bullets.filter(b => {
-    const firstWord = b.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '');
-    return STRONG_ACTION_VERBS.has(firstWord);
+    const firstThree = b.split(/\s+/).slice(0, 3).map(w => w.toLowerCase().replace(/[^a-z]/g, ''));
+    return firstThree.some(w => STRONG_ACTION_VERBS.has(w));
   });
   const strongVerbRate = total > 0 ? strongVerbBullets.length / total : 0;
 
@@ -354,6 +383,11 @@ function scoreInterviewer(resumeText: string): PersonaScore {
   score += Math.round(strongVerbRate * 15);
   score -= Math.min(20, weakBullets.length * 5);
   score -= Math.min(15, shortStints.length * 8);
+
+  // Boost when the resume genuinely has no issues — the score formula can
+  // produce amber even when there is nothing to fix, which feels unfair.
+  const hasRealIssues = quantRate < 0.3 || weakBullets.length > 0 || shortStints.length > 0;
+  if (!hasRealIssues) score += 8;
 
   score = clamp(Math.round(score), 15, 95);
 
