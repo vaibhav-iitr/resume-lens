@@ -1,5 +1,4 @@
-import fs from 'fs';
-import path from 'path';
+import { kv } from '@vercel/kv';
 import { randomUUID } from 'crypto';
 
 export interface User {
@@ -10,70 +9,41 @@ export interface User {
   createdAt: string;
 }
 
-interface StoreData {
-  users: Record<string, User>;
+// Keys:
+//   user:<id>        → User object
+//   email:<email>    → user id  (lookup index)
+
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const id = await kv.get<string>(`email:${email.toLowerCase()}`);
+  if (!id) return null;
+  return kv.get<User>(`user:${id}`);
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const STORE_PATH = path.join(DATA_DIR, 'store.json');
-
-function readStore(): StoreData {
-  try {
-    if (!fs.existsSync(DATA_DIR)) {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(STORE_PATH)) {
-      return { users: {} };
-    }
-    const raw = fs.readFileSync(STORE_PATH, 'utf-8');
-    return JSON.parse(raw) as StoreData;
-  } catch {
-    return { users: {} };
-  }
+export async function getUserById(id: string): Promise<User | null> {
+  return kv.get<User>(`user:${id}`);
 }
 
-function writeStore(data: StoreData): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  fs.writeFileSync(STORE_PATH, JSON.stringify(data, null, 2), 'utf-8');
-}
-
-export function getUserByEmail(email: string): User | null {
-  const store = readStore();
-  const user = Object.values(store.users).find(
-    (u) => u.email.toLowerCase() === email.toLowerCase()
-  );
-  return user ?? null;
-}
-
-export function getUserById(id: string): User | null {
-  const store = readStore();
-  return store.users[id] ?? null;
-}
-
-export function createUser(email: string, passwordHash: string): User {
-  const store = readStore();
+export async function createUser(email: string, passwordHash: string): Promise<User> {
   const id = randomUUID();
   const user: User = {
     id,
-    email,
+    email: email.toLowerCase(),
     passwordHash,
     llmUsesRemaining: 3,
     createdAt: new Date().toISOString(),
   };
-  store.users[id] = user;
-  writeStore(store);
+  await Promise.all([
+    kv.set(`user:${id}`, user),
+    kv.set(`email:${email.toLowerCase()}`, id),
+  ]);
   return user;
 }
 
-export function decrementLLMUse(id: string): User | null {
-  const store = readStore();
-  const user = store.users[id];
+export async function decrementLLMUse(id: string): Promise<User | null> {
+  const user = await kv.get<User>(`user:${id}`);
   if (!user) return null;
   if (user.llmUsesRemaining <= 0) return user;
-  user.llmUsesRemaining -= 1;
-  store.users[id] = user;
-  writeStore(store);
-  return user;
+  const updated: User = { ...user, llmUsesRemaining: user.llmUsesRemaining - 1 };
+  await kv.set(`user:${id}`, updated);
+  return updated;
 }

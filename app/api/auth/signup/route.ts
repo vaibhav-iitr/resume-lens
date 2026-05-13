@@ -24,13 +24,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
   }
 
-  const existing = getUserByEmail(email);
+  const existing = await getUserByEmail(email);
   if (existing) {
     return NextResponse.json({ error: 'An account with this email already exists' }, { status: 409 });
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = createUser(email, passwordHash);
+  const user = await createUser(email, passwordHash);
 
   const token = await signToken({ sub: user.id, email: user.email });
 

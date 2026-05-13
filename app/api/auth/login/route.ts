@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: INVALID_MSG }, { status: 401 });
   }
 
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   if (!user) {
     // Still run bcrypt to prevent timing attacks
     await bcrypt.compare(password, '$2a$10$placeholder.hash.to.prevent.timing.attacks.xxxxx');

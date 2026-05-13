@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
-      const user = getUserById(payload.sub);
+      const user = await getUserById(payload.sub);
       if (!user) {
         return NextResponse.json<AnalyzeResponse>(
           { success: false, error: 'User not found' },
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await analyzeResumeWithGroq(resumeText, jobDescription);
-      const updated = decrementLLMUse(user.id);
+      const updated = await decrementLLMUse(user.id);
 
       return NextResponse.json<AnalyzeResponse>({
         success: true,
